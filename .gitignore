@@ -1,0 +1,17 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Reference cloned repositories
+reference-repos/
+
+# Local cache & temp files
+.pytest_cache/
+.ipynb_checkpoints/
+*.log
+
+# Environments & IDEs
+.vscode/
+.idea/
+.env

@@ -1,0 +1,8 @@
+timestamp,event_type,track_id,category,class_name,confidence,plate_text,ocr_confidence,status,details
+2026-09-07 19:21:16,INTRUSION_ALERT,1,human,person,0.739,-,0.0,VERIFIED,"Crossed BOP Sector 4 Tripwire at (1522, 601)"
+2026-09-07 19:21:19,INTRUSION_ALERT,3,human,person,0.789,-,0.0,VERIFIED,"Crossed BOP Sector 4 Tripwire at (269, 605)"
+2026-09-07 19:21:19,INTRUSION_ALERT,4,human,person,0.832,-,0.0,VERIFIED,"Crossed BOP Sector 4 Tripwire at (712, 599)"
+2026-09-07 19:21:24,INTRUSION_ALERT,34,human,person,0.767,-,0.0,VERIFIED,"Crossed BOP Sector 4 Tripwire at (1790, 595)"
+2026-09-07 19:21:25,INTRUSION_ALERT,2,human,person,0.479,-,0.0,VERIFIED,"Crossed BOP Sector 4 Tripwire at (1584, 610)"
+2026-09-07 19:21:34,INTRUSION_ALERT,7,human,person,0.723,-,0.0,VERIFIED,"Crossed BOP Sector 4 Tripwire at (1092, 599)"
+2026-09-07 19:21:38,INTRUSION_ALERT,14,human,person,0.59,-,0.0,VERIFIED,"Crossed BOP Sector 4 Tripwire at (582, 605)"

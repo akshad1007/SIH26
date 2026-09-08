@@ -1,4 +1,4 @@
 timestamp,event_type,track_id,category,class_name,confidence,plate_text,ocr_confidence,status,details
-2026-09-08 11:39:51,INTRUSION_ALERT,4,human,person,0.841,-,0.0,VERIFIED,"Crossed Sector B Pedestrian Tripwire (OUTBOUND (Northbound)) at (482, 279)"
-2026-09-08 11:39:52,INTRUSION_ALERT,1,human,person,0.817,-,0.0,VERIFIED,"Crossed Sector B Pedestrian Tripwire (OUTBOUND (Northbound)) at (413, 280)"
-2026-09-08 11:39:54,INTRUSION_ALERT,3,human,person,0.831,-,0.0,VERIFIED,"Crossed Sector B Pedestrian Tripwire (OUTBOUND (Northbound)) at (435, 280)"
+2026-09-08 12:22:31,INTRUSION_ALERT,4,human,person,0.798,-,0.0,UNKNOWN_INTRUDER,"UNKNOWN PERSON | Crossed Sector B Pedestrian Tripwire (OUTBOUND (Northbound)) at (478, 277)"
+2026-09-08 12:22:33,AUTHORIZED_PATROL,1,human,person,0.842,-,0.0,AUTHORIZED_PATROL,"Constable R. Singh (SSB-4587) | Crossed Sector B Pedestrian Tripwire (OUTBOUND (Northbound)) at (404, 277)"
+2026-09-08 12:22:34,INTRUSION_ALERT,3,human,person,0.828,-,0.0,UNKNOWN_INTRUDER,"UNKNOWN PERSON | Crossed Sector B Pedestrian Tripwire (OUTBOUND (Northbound)) at (434, 277)"

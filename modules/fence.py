@@ -37,9 +37,9 @@ class VirtualFence:
         self.p1 = p1
         self.p2 = p2
 
-    def check_intrusions(self, active_tracks: dict, timestamp: str = ""):
+    def check_intrusions(self, active_tracks: dict, timestamp: str = "", watchlist=None):
         """
-        Evaluates active tracks for boundary crossing.
+        Evaluates active tracks for boundary crossing with Watchlist Identity Check.
         Returns list of new alert events triggered in this frame.
         """
         new_alerts = []
@@ -63,26 +63,44 @@ class VirtualFence:
                 dy = curr_pt[1] - prev_pt[1]
                 direction = "INBOUND (Southbound)" if dy >= 0 else "OUTBOUND (Northbound)"
 
+                # Step 7 & 8: Watchlist Identity Verification
+                is_auth = False
+                personnel_info = None
+                if watchlist is not None:
+                    is_auth, personnel_info = watchlist.verify_person(track_id)
+
+                if is_auth and personnel_info:
+                    event_type = "AUTHORIZED_PATROL"
+                    status = "AUTHORIZED_PATROL"
+                    identity_str = f"{personnel_info['name']} ({personnel_info['personnel_id']})"
+                else:
+                    event_type = "INTRUSION_ALERT"
+                    status = "UNKNOWN_INTRUDER"
+                    identity_str = "UNKNOWN PERSON"
+
                 alert_event = {
                     "timestamp": timestamp,
-                    "event_type": "INTRUSION_ALERT",
+                    "event_type": event_type,
                     "track_id": track_id,
                     "category": data.get("category", "human"),
                     "class_name": data.get("class_name", "person"),
                     "confidence": data.get("conf", 0.0),
                     "zone": self.zone_name,
                     "direction": direction,
+                    "identity": identity_str,
+                    "is_authorized": is_auth,
                     "location": f"({curr_pt[0]}, {curr_pt[1]})",
-                    "status": "VERIFIED"
+                    "status": status
                 }
                 self.alert_history.append(alert_event)
                 new_alerts.append(alert_event)
 
         return new_alerts
 
-    def draw_fence(self, frame: np.ndarray, active_tracks: dict):
+    def draw_fence(self, frame: np.ndarray, active_tracks: dict, watchlist=None):
         """
         Draws the virtual fence boundary line and overlays intrusion warning markers.
+        Renders GREEN for Authorized Patrols and RED for Unknown Intruders (Slide Step 8).
         """
         annotated = frame.copy()
         h, w = annotated.shape[:2]
@@ -112,20 +130,37 @@ class VirtualFence:
         # Draw Intrusion highlights on active breached tracks
         for track_id, data in active_tracks.items():
             traj = data.get("trajectory", [])
-            # Draw trajectory trail
+
+            is_auth = False
+            auth_info = None
+            if watchlist is not None:
+                is_auth, auth_info = watchlist.verify_person(track_id)
+
+            # Trajectory trail color: Green for authorized, Red for breached intruder, Yellow for normal track
+            if track_id in self.intruded_track_ids:
+                trail_color = (0, 200, 0) if is_auth else (0, 0, 255)
+            else:
+                trail_color = (0, 255, 255)
+
             if len(traj) >= 2:
                 pts = np.array(traj, np.int32).reshape((-1, 1, 2))
-                trail_color = (0, 0, 255) if track_id in self.intruded_track_ids else (0, 255, 255)
                 cv2.polylines(annotated, [pts], False, trail_color, 2)
 
-            # If track is an active intruder, highlight in bold Red
+            # Highlight breached track
             if track_id in self.intruded_track_ids:
                 x1, y1, x2, y2 = data["bbox"]
-                cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 0, 255), 3)
+                box_color = (0, 200, 0) if is_auth else (0, 0, 255)
+                cv2.rectangle(annotated, (x1, y1), (x2, y2), box_color, 3)
 
-                alert_tag = f"! INTRUSION #{track_id} !"
-                tag_w = 170 if w < 1000 else 210
-                cv2.rectangle(annotated, (x1, max(0, y1 - 22)), (x1 + tag_w, y1), (0, 0, 255), -1)
-                cv2.putText(annotated, alert_tag, (x1 + 4, max(14, y1 - 6)), font, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
+                if is_auth and auth_info:
+                    alert_tag = f"AUTH: {auth_info['name'].split()[-1]} ({auth_info['personnel_id']})"
+                    bg_color = (0, 150, 0)
+                else:
+                    alert_tag = f"! INTRUDER #{track_id} !"
+                    bg_color = (0, 0, 255)
+
+                (tag_tw, tag_th), _ = cv2.getTextSize(alert_tag, font, 0.42, 1)
+                cv2.rectangle(annotated, (x1, max(0, y1 - 22)), (x1 + tag_tw + 8, y1), bg_color, -1)
+                cv2.putText(annotated, alert_tag, (x1 + 4, max(14, y1 - 6)), font, 0.42, (255, 255, 255), 1, cv2.LINE_AA)
 
         return annotated

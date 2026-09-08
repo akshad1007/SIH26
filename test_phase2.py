@@ -7,6 +7,7 @@ from modules.detector import ObjectDetector
 from modules.tracker import CentroidTracker
 from modules.fence import VirtualFence
 from modules.logger import EventLogger
+from modules.watchlist import WatchlistDatabase
 
 
 def verify_video(video_path: str, zone_name: str = "Tripwire Sector", tripwire_y: int = None,
@@ -47,6 +48,7 @@ def verify_video(video_path: str, zone_name: str = "Tripwire Sector", tripwire_y
     logger = EventLogger(csv_path=csv_path)
     logger.clear()
 
+    watchlist = WatchlistDatabase()
     frame_idx = 0
     saved_alert_frame = None
     t0 = time.time()
@@ -65,12 +67,13 @@ def verify_video(video_path: str, zone_name: str = "Tripwire Sector", tripwire_y
         # 2. Tracking
         active_tracks = tracker.update(detections)
 
-        # 3. Virtual Fence Intrusion Check
-        new_intrusions = fence.check_intrusions(active_tracks, timestamp=now_str)
+        # 3. Virtual Fence Intrusion Check with Step 7 Watchlist Query
+        new_intrusions = fence.check_intrusions(active_tracks, timestamp=now_str, watchlist=watchlist)
 
-        # 4. Logging
+        # 4. Logging & Step 8 Decision Reporting
         for alert in new_intrusions:
             direction = alert.get("direction", "CROSSING")
+            identity = alert.get("identity", "UNKNOWN PERSON")
             logger.log_event(
                 event_type=alert["event_type"],
                 track_id=alert["track_id"],
@@ -78,16 +81,19 @@ def verify_video(video_path: str, zone_name: str = "Tripwire Sector", tripwire_y
                 class_name=alert["class_name"],
                 confidence=alert["confidence"],
                 status=alert["status"],
-                details=f"Crossed {alert['zone']} ({direction}) at {alert['location']}",
+                details=f"{identity} | Crossed {alert['zone']} ({direction}) at {alert['location']}",
                 timestamp=alert["timestamp"]
             )
-            print(f"[ALARM] {now_str} | INTRUSION #{alert['track_id']} ({alert['class_name'].upper()}) "
-                  f"Dir: {direction} | Conf: {alert['confidence']*100:.1f}%")
+            if alert["event_type"] == "AUTHORIZED_PATROL":
+                print(f"[MATCH FOUND] ✅ {now_str} | AUTHORIZED PATROL: {identity} | Dir: {direction} (Alarm Suppressed)")
+            else:
+                print(f"[NO MATCH]    🚨 {now_str} | UNKNOWN INTRUDER #{alert['track_id']} ({alert['class_name'].upper()}) "
+                      f"Dir: {direction} | Conf: {alert['confidence']*100:.1f}%")
 
         # 5. Save a preview frame when intrusions are detected
         if len(fence.intruded_track_ids) >= 1 and saved_alert_frame is None and frame_idx > 30:
             annotated = detector.draw_detections(frame, detections)
-            annotated = fence.draw_fence(annotated, active_tracks)
+            annotated = fence.draw_fence(annotated, active_tracks, watchlist=watchlist)
             saved_alert_frame = annotated
 
     elapsed = time.time() - t0

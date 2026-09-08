@@ -10,6 +10,8 @@ from modules.tracker import CentroidTracker
 from modules.fence import VirtualFence
 from modules.anpr import CascadedANPR
 from modules.logger import EventLogger
+from modules.enhancer import LowLightEnhancer
+from modules.watchlist import WatchlistDatabase
 
 # Page Configuration
 st.set_page_config(
@@ -126,10 +128,12 @@ def load_models():
         throttle_frames=15,
         min_vehicle_height=50
     )
-    return detector, anpr
+    enhancer = LowLightEnhancer(clip_limit=3.0)
+    watchlist = WatchlistDatabase()
+    return detector, anpr, enhancer, watchlist
 
 
-detector, anpr = load_models()
+detector, anpr, enhancer, watchlist = load_models()
 
 # Persistent Session State Setup
 if "logger" not in st.session_state:
@@ -185,6 +189,25 @@ if is_perimeter_mode:
     )
 
 st.sidebar.markdown("---")
+st.sidebar.subheader("🌟 Image Enhancement (Step 2)")
+enable_clahe = st.sidebar.checkbox(
+    "🌙 Low-Light / Fog CLAHE",
+    value=False,
+    help="Restores visibility in pitch-black or foggy border feeds using OpenCV CLAHE"
+)
+clahe_limit = 3.0
+if enable_clahe:
+    clahe_limit = st.sidebar.slider("Contrast Clip Limit", 1.0, 6.0, 3.0, 0.5)
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("🛡️ Watchlist Verification (Steps 7 & 8)")
+enable_watchlist = st.sidebar.checkbox(
+    "🔍 Local Watchlist Search",
+    value=True,
+    help="Cross-references breach events against the Authorized SSB Patrol & Vehicle Roster"
+)
+
+st.sidebar.markdown("---")
 st.sidebar.subheader("Stream Telemetry")
 conf_thresh = st.sidebar.slider("Detection Sensitivity (Confidence)", 0.25, 0.70, 0.35, 0.05)
 frame_stride = st.sidebar.slider("Frame Processing Stride", 1, 3, 1, 1, help="Higher stride yields smoother playback on CPU")
@@ -220,10 +243,13 @@ ph_metric4 = c4.empty()
 
 # Initial KPI values
 initial_stats = logger.get_stats()
-ph_metric1.metric("Perimeter Intrusions", initial_stats["intrusions"])
-ph_metric2.metric("Vehicles Tracked", initial_stats["vehicles_detected"])
-ph_metric3.metric("Verified Plates Read", initial_stats["plates_read"])
-ph_metric4.metric("Flagged Manual Reviews", initial_stats["flagged_manual_review"])
+init_df = logger.get_dataframe()
+auth_count = len(init_df[init_df["event_type"].str.contains("AUTHORIZED", na=False)]) if not init_df.empty else 0
+
+ph_metric1.metric("🚨 Intrusion Alerts", initial_stats["intrusions"])
+ph_metric2.metric("✅ Authorized Patrols", auth_count)
+ph_metric3.metric("🚗 Vehicles Tracked", initial_stats["vehicles_detected"])
+ph_metric4.metric("🪪 Verified Plates Read", initial_stats["plates_read"])
 
 # Tab Layout: Live Post vs Historical Analytics vs SSB Roadmap
 tab_live, tab_logs, tab_roadmap = st.tabs([
@@ -240,6 +266,7 @@ with tab_live:
 
     with col_player:
         st.markdown(f"**📹 Sector Video Stream:** `{channel_selection.split(':')[1].strip()}`")
+        ph_banner = st.empty()
         ph_video = st.empty()
 
     with col_feed:
@@ -296,17 +323,23 @@ with tab_live:
                 annotated_frame = frame
                 time.sleep(0.02)
             else:
-                # 1. Object Detection (YOLOv8)
-                detections = detector.detect(frame, conf_threshold=conf_thresh)
+                # Step 2: Image Enhancement (Zero-DCE / CLAHE)
+                if enable_clahe:
+                    frame = enhancer.enhance(frame, clip_limit=clahe_limit)
 
-                # 2. Tracking (CentroidTracker)
+                # Step 3: Object Detection & Tracking (YOLOv8 + CentroidTracker)
+                detections = detector.detect(frame, conf_threshold=conf_thresh)
                 active_tracks = tracker.update(detections)
 
                 annotated_frame = detector.draw_detections(frame, detections)
 
-                # 3. Channel Specific Processing
+                # Step 4, 5, 7 & 8: Channel Specific Boundary Check & Identity Decision
                 if is_perimeter_mode and fence is not None:
-                    new_intrusions = fence.check_intrusions(active_tracks, timestamp=now_str)
+                    new_intrusions = fence.check_intrusions(
+                        active_tracks,
+                        timestamp=now_str,
+                        watchlist=watchlist if enable_watchlist else None
+                    )
                     for alert in new_intrusions:
                         logger.log_event(
                             event_type=alert["event_type"],
@@ -315,28 +348,36 @@ with tab_live:
                             class_name=alert["class_name"],
                             confidence=alert["confidence"],
                             status=alert["status"],
-                            details=f"Breached boundary ({alert.get('direction', 'CROSSING')}) at {alert['location']}",
+                            details=f"{alert.get('identity', 'UNKNOWN')} | {alert.get('direction', 'CROSSING')} at {alert['location']}",
                             timestamp=alert["timestamp"]
                         )
-                    annotated_frame = fence.draw_fence(annotated_frame, active_tracks)
+                    annotated_frame = fence.draw_fence(
+                        annotated_frame,
+                        active_tracks,
+                        watchlist=watchlist if enable_watchlist else None
+                    )
 
                 else:
-                    # Vehicle Checkpoint & ANPR
+                    # Vehicle Checkpoint & ANPR (Step 6B)
                     for track_id, data in active_tracks.items():
                         if data.get("category") == "vehicle":
                             anpr_res = anpr.process_vehicle(frame, data["bbox"], track_id=track_id, frame_idx=frame_idx)
                             if anpr_res:
+                                is_auth_veh, veh_rec = watchlist.verify_vehicle(anpr_res["plate_text"]) if enable_watchlist else (False, None)
+                                veh_status = "AUTHORIZED_PATROL_VEHICLE" if is_auth_veh else anpr_res["status"]
+                                veh_details = f"{veh_rec['unit']} ({veh_rec['vehicle_type']})" if is_auth_veh else f"Plate Conf: {anpr_res['plate_conf']*100:.0f}%"
+
                                 annotated_frame = anpr.draw_anpr(annotated_frame, anpr_res)
                                 logger.log_event(
-                                    event_type="VEHICLE_ANPR",
+                                    event_type="AUTHORIZED_VEHICLE" if is_auth_veh else "VEHICLE_ANPR",
                                     track_id=track_id,
                                     category="vehicle",
                                     class_name=data.get("class_name", "car"),
                                     confidence=data.get("conf", 0.0),
                                     plate_text=anpr_res["plate_text"],
                                     ocr_confidence=anpr_res["ocr_conf"],
-                                    status=anpr_res["status"],
-                                    details=f"Plate Conf: {anpr_res['plate_conf']*100:.0f}%",
+                                    status=veh_status,
+                                    details=veh_details,
                                     timestamp=now_str
                                 )
 
@@ -346,15 +387,23 @@ with tab_live:
 
             # Update Metrics cleanly in placeholders
             stats = logger.get_stats()
-            ph_metric1.metric("Perimeter Intrusions", stats["intrusions"])
-            ph_metric2.metric("Vehicles Tracked", stats["vehicles_detected"])
-            ph_metric3.metric("Verified Plates Read", stats["plates_read"])
-            ph_metric4.metric("Flagged Manual Reviews", stats["flagged_manual_review"])
-
-            # Update Recent Incident Feed
             df = logger.get_dataframe()
+            auth_count = len(df[df["event_type"].str.contains("AUTHORIZED", na=False)]) if not df.empty else 0
+
+            ph_metric1.metric("🚨 Intrusion Alerts", stats["intrusions"])
+            ph_metric2.metric("✅ Authorized Patrols", auth_count)
+            ph_metric3.metric("🚗 Vehicles Tracked", stats["vehicles_detected"])
+            ph_metric4.metric("🪪 Verified Plates Read", stats["plates_read"])
+
+            # Update Dynamic Alert Banner & Recent Incident Feed
             if not df.empty:
-                recent_df = df.tail(7)[["timestamp", "event_type", "track_id", "plate_text", "status"]]
+                last_event = df.iloc[-1]
+                if last_event["event_type"] == "AUTHORIZED_PATROL" or last_event["event_type"] == "AUTHORIZED_VEHICLE":
+                    ph_banner.success(f"✅ MATCH FOUND (Authorized Patrol): {last_event['details']} • False Alarm Suppressed")
+                elif last_event["event_type"] == "INTRUSION_ALERT":
+                    ph_banner.error(f"🚨 NO MATCH (Unknown Intruder): Track #{last_event['track_id']} Breached Perimeter! • Security Dispatched")
+
+                recent_df = df.tail(7)[["timestamp", "event_type", "track_id", "status", "details"]]
                 ph_alerts.dataframe(
                     recent_df,
                     use_container_width=True,
@@ -406,6 +455,18 @@ with tab_logs:
         )
     else:
         st.info("No incident records currently logged in this session.")
+
+    # Step 7: Watchlist Database Viewer
+    st.markdown("---")
+    with st.expander("🗂️ Step 7: Local Offline Watchlist Database (FAISS / SQLite Architecture)", expanded=True):
+        st.caption("Sub-millisecond local offline matching for authorized border personnel and official patrol vehicles.")
+        col_w1, col_w2 = st.columns(2)
+        with col_w1:
+            st.markdown("##### 👮 Authorized Border Patrol Roster (ArcFace / Face Vector)")
+            st.dataframe(watchlist.get_personnel_dataframe(), use_container_width=True, hide_index=True)
+        with col_w2:
+            st.markdown("##### 🚙 Authorized Patrol & Logistics Vehicles (ANPR Plates)")
+            st.dataframe(watchlist.get_vehicles_dataframe(), use_container_width=True, hide_index=True)
 
 # -------------------------------------------------------------
 # TAB 3: SSB OPERATIONAL ROADMAP (PRESENTATION SLIDES)

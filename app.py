@@ -152,11 +152,12 @@ st.sidebar.markdown("---")
 channel_selection = st.sidebar.radio(
     "Surveillance Sector Feed",
     [
-        "Channel 1: BOP Perimeter Sector (Intrusion Detection)",
-        "Channel 2: Checkpost Charlie (Vehicles & ANPR)",
-        "Channel 3: Pre-recorded Backup Demo (Insurance Run)"
+        "Channel 1: Sector A - BOP Perimeter (1080p Long-Range)",
+        "Channel 2: Sector B - Pedestrian Crossing (vedio-sih26.mp4)",
+        "Channel 3: Sector C - Checkpost Charlie (Vehicles & ANPR)",
+        "Channel 4: Backup Pre-recorded Demo (Insurance Run)"
     ],
-    index=0
+    index=1  # Default to Sector B (vedio-sih26.mp4) to showcase newly added human crossing feed!
 )
 
 # Detect Channel Switch and Reset Tracker
@@ -165,6 +166,23 @@ if st.session_state.active_channel != current_ch_key:
     st.session_state.active_channel = current_ch_key
     st.session_state.tracker = CentroidTracker(max_disappeared=20, max_distance=90.0)
     tracker = st.session_state.tracker
+
+# Virtual Fence / Tripwire interactive calibration
+is_perimeter_mode = "Channel 1" in channel_selection or "Channel 2" in channel_selection
+tripwire_y = None
+
+if is_perimeter_mode:
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("📐 Virtual Fence Calibration")
+    is_sector_b = "Channel 2" in channel_selection
+    tripwire_y = st.sidebar.slider(
+        "Tripwire Boundary Line (Y-position)",
+        min_value=50 if is_sector_b else 100,
+        max_value=450 if is_sector_b else 1000,
+        value=280 if is_sector_b else 600,
+        step=10,
+        help="Calibrate the intrusion tripwire line height for this sector"
+    )
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Stream Telemetry")
@@ -231,9 +249,21 @@ with tab_live:
     # Route video path and channel parameters
     if "Channel 1" in channel_selection:
         video_path = "sample_videos/bop_perimeter.mp4"
-        fence = VirtualFence(line_coords=((100, 600), (1820, 600)), zone_name="BOP Sector 4 Tripwire")
+        y_pos = tripwire_y if tripwire_y is not None else 600
+        fence = VirtualFence(line_coords=((50, y_pos), (1870, y_pos)), zone_name="Sector A Perimeter")
         is_perimeter_mode = True
     elif "Channel 2" in channel_selection:
+        # Preferred: root vedio-sih26.mp4 or sample_videos copy
+        if os.path.exists("vedio-sih26.mp4"):
+            video_path = "vedio-sih26.mp4"
+        elif os.path.exists("sample_videos/pedestrian_crossing.mp4"):
+            video_path = "sample_videos/pedestrian_crossing.mp4"
+        else:
+            video_path = "sample_videos/vedio-sih26.mp4"
+        y_pos = tripwire_y if tripwire_y is not None else 280
+        fence = VirtualFence(line_coords=((20, y_pos), (828, y_pos)), zone_name="Sector B Tripwire")
+        is_perimeter_mode = True
+    elif "Channel 3" in channel_selection:
         video_path = "sample_videos/checkpost_traffic.mp4"
         fence = None
         is_perimeter_mode = False
@@ -262,7 +292,7 @@ with tab_live:
             now_str = datetime.now().strftime("%H:%M:%S")
 
             # Check if playing pre-rendered backup video
-            if "Channel 3" in channel_selection and os.path.exists("sample_videos/backup_annotated_run.mp4"):
+            if "Channel 4" in channel_selection and os.path.exists("sample_videos/backup_annotated_run.mp4"):
                 annotated_frame = frame
                 time.sleep(0.02)
             else:
@@ -285,7 +315,7 @@ with tab_live:
                             class_name=alert["class_name"],
                             confidence=alert["confidence"],
                             status=alert["status"],
-                            details=f"Breached boundary at {alert['location']}",
+                            details=f"Breached boundary ({alert.get('direction', 'CROSSING')}) at {alert['location']}",
                             timestamp=alert["timestamp"]
                         )
                     annotated_frame = fence.draw_fence(annotated_frame, active_tracks)

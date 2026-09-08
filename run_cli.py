@@ -63,27 +63,32 @@ def test_video(video_path: str, max_frames: int = 75, preview_save_path: str = N
 
 def main():
     parser = argparse.ArgumentParser(description="IBVAP Phase 1 Detection CLI Verification")
-    parser.add_argument("--channel1", default="sample_videos/bop_perimeter.mp4", help="Channel 1 video path")
-    parser.add_argument("--channel2", default="sample_videos/checkpost_traffic.mp4", help="Channel 2 video path")
+    parser.add_argument("--channel1", default="sample_videos/bop_perimeter.mp4", help="Sector A Perimeter video path")
+    parser.add_argument("--channel2", default="vedio-sih26.mp4", help="Sector B Pedestrian Crossing video path")
+    parser.add_argument("--channel3", default="sample_videos/checkpost_traffic.mp4", help="Sector C Checkpost video path")
     parser.add_argument("--frames", type=int, default=60, help="Frames to test per channel")
     args = parser.parse_args()
 
     print("=" * 65)
-    print("  IBVAP PHASE 1 VERIFICATION: CORE DETECTION PIPELINE")
+    print("  IBVAP MULTI-CHANNEL DETECTION CLI PIPELINE VERIFICATION")
     print("=" * 65)
 
     res1 = test_video(args.channel1, max_frames=args.frames, preview_save_path="sample_videos/preview_channel1.jpg")
-    res2 = test_video(args.channel2, max_frames=args.frames, preview_save_path="sample_videos/preview_channel2.jpg")
+    res2 = test_video(args.channel2, max_frames=args.frames, preview_save_path="sample_videos/preview_sih26_intrusion.jpg")
+    res3 = test_video(args.channel3, max_frames=args.frames, preview_save_path="sample_videos/preview_channel2.jpg")
 
     print("\n" + "=" * 65)
-    print("  PHASE 1 SUMMARY REPORT")
+    print("  PHASE 1 MULTI-CHANNEL SUMMARY REPORT")
     print("=" * 65)
     if res1:
-        print(f"Channel 1 (Perimeter): {res1['frames']} frames @ {res1['fps']:.1f} FPS | Humans: {res1['humans']}, Vehicles: {res1['vehicles']}")
+        print(f"Channel 1 (Sector A Perimeter):  {res1['frames']} frames @ {res1['fps']:.1f} FPS | Humans: {res1['humans']}, Vehicles: {res1['vehicles']}")
     if res2:
-        print(f"Channel 2 (Checkpost): {res2['frames']} frames @ {res2['fps']:.1f} FPS | Humans: {res2['humans']}, Vehicles: {res2['vehicles']}")
+        print(f"Channel 2 (Sector B Crossing):   {res2['frames']} frames @ {res2['fps']:.1f} FPS | Humans: {res2['humans']}, Vehicles: {res2['vehicles']}")
+    if res3:
+        print(f"Channel 3 (Sector C Checkpost):  {res3['frames']} frames @ {res3['fps']:.1f} FPS | Humans: {res3['humans']}, Vehicles: {res3['vehicles']}")
     print("=" * 65)
 
 
 if __name__ == "__main__":
     main()
+

@@ -32,6 +32,11 @@ class VirtualFence:
         self.intruded_track_ids = set()   # Tracks that have breached the perimeter
         self.alert_history = []           # List of triggered alert events
 
+    def update_line(self, p1: tuple, p2: tuple):
+        """Dynamically update line coordinates (e.g. from UI slider)."""
+        self.p1 = p1
+        self.p2 = p2
+
     def check_intrusions(self, active_tracks: dict, timestamp: str = ""):
         """
         Evaluates active tracks for boundary crossing.
@@ -54,6 +59,10 @@ class VirtualFence:
 
             if segments_intersect(prev_pt, curr_pt, self.p1, self.p2):
                 self.intruded_track_ids.add(track_id)
+                # Compute crossing direction
+                dy = curr_pt[1] - prev_pt[1]
+                direction = "INBOUND (Southbound)" if dy >= 0 else "OUTBOUND (Northbound)"
+
                 alert_event = {
                     "timestamp": timestamp,
                     "event_type": "INTRUSION_ALERT",
@@ -62,6 +71,7 @@ class VirtualFence:
                     "class_name": data.get("class_name", "person"),
                     "confidence": data.get("conf", 0.0),
                     "zone": self.zone_name,
+                    "direction": direction,
                     "location": f"({curr_pt[0]}, {curr_pt[1]})",
                     "status": "VERIFIED"
                 }
@@ -81,15 +91,19 @@ class VirtualFence:
         fence_color = (0, 0, 255)  # BGR Red
         cv2.line(annotated, self.p1, self.p2, fence_color, 3)
 
-        # Fence Warning Badge
+        # Draw line endpoint markers
+        cv2.circle(annotated, self.p1, 6, (0, 255, 255), -1)
+        cv2.circle(annotated, self.p2, 6, (0, 255, 255), -1)
+
+        # Responsive badge font scale
+        font_scale = 0.45 if w < 1000 else 0.55
+        thickness = 1 if w < 1000 else 2
         badge_text = f"RESTRICTED BORDER VIRTUAL FENCE - {self.zone_name.upper()}"
         font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.55
-        thickness = 2
         (tw, th), baseline = cv2.getTextSize(badge_text, font, font_scale, thickness)
 
-        mid_x = int((self.p1[0] + self.p2[0]) / 2) - int(tw / 2)
-        mid_y = int((self.p1[1] + self.p2[1]) / 2) - 10
+        mid_x = max(10, int((self.p1[0] + self.p2[0]) / 2) - int(tw / 2))
+        mid_y = max(th + 12, int((self.p1[1] + self.p2[1]) / 2) - 10)
 
         # Semi-transparent background for fence label
         cv2.rectangle(annotated, (mid_x - 6, mid_y - th - 6), (mid_x + tw + 6, mid_y + baseline), (0, 0, 180), -1)
@@ -109,8 +123,9 @@ class VirtualFence:
                 x1, y1, x2, y2 = data["bbox"]
                 cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 0, 255), 3)
 
-                alert_tag = f"! INTRUSION ALERT #{track_id} !"
-                cv2.rectangle(annotated, (x1, y1 - 22), (x1 + 220, y1), (0, 0, 255), -1)
-                cv2.putText(annotated, alert_tag, (x1 + 4, y1 - 6), font, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+                alert_tag = f"! INTRUSION #{track_id} !"
+                tag_w = 170 if w < 1000 else 210
+                cv2.rectangle(annotated, (x1, max(0, y1 - 22)), (x1 + tag_w, y1), (0, 0, 255), -1)
+                cv2.putText(annotated, alert_tag, (x1 + 4, max(14, y1 - 6)), font, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
 
         return annotated

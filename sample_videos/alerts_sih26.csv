@@ -1,0 +1,4 @@
+timestamp,event_type,track_id,category,class_name,confidence,plate_text,ocr_confidence,status,details
+2026-09-08 11:39:51,INTRUSION_ALERT,4,human,person,0.841,-,0.0,VERIFIED,"Crossed Sector B Pedestrian Tripwire (OUTBOUND (Northbound)) at (482, 279)"
+2026-09-08 11:39:52,INTRUSION_ALERT,1,human,person,0.817,-,0.0,VERIFIED,"Crossed Sector B Pedestrian Tripwire (OUTBOUND (Northbound)) at (413, 280)"
+2026-09-08 11:39:54,INTRUSION_ALERT,3,human,person,0.831,-,0.0,VERIFIED,"Crossed Sector B Pedestrian Tripwire (OUTBOUND (Northbound)) at (435, 280)"

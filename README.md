@@ -57,13 +57,15 @@ SIH26187/
 │   ├── __init__.py
 │   ├── detector.py              # YOLOv8 Person & Vehicle Detection Module
 │   ├── tracker.py               # Centroid Tracker with Trajectory History
-│   ├── fence.py                 # Virtual Fence Line-Crossing Intrusion Engine
+│   ├── fence.py                 # Virtual Fence Line-Crossing Intrusion Engine (Directional)
 │   ├── anpr.py                  # Cascaded Plate Detector + EasyOCR + Cache
 │   └── logger.py                # In-memory Event Logger & CSV Exporter
-└── sample_videos/
-    ├── bop_perimeter.mp4        # Channel 1: Pedestrian Border Sector Video
-    ├── checkpost_traffic.mp4    # Channel 2: Vehicle Checkpoint Video
-    └── backup_annotated_run.mp4 # Channel 3: Pre-rendered Annotated Backup Run
+├── sample_videos/
+│   ├── bop_perimeter.mp4        # Channel 1: Sector A Long-Range Border Perimeter
+│   ├── pedestrian_crossing.mp4  # Channel 2: Sector B Tactical Human Line Crossing (vedio-sih26.mp4)
+│   ├── checkpost_traffic.mp4    # Channel 3: Sector C Vehicle Checkpoint & ANPR
+│   └── backup_annotated_run.mp4 # Channel 4: Pre-rendered Annotated Backup Run
+└── vedio-sih26.mp4               # High-density pedestrian line crossing surveillance feed
 ```
 
 ---
@@ -84,17 +86,20 @@ pip install -r requirements.txt
 ```bash
 streamlit run app.py
 ```
-*Open http://localhost:8501 in your browser.*
+*Open http://localhost:8501 in your browser to view all 4 surveillance channels with interactive virtual fence calibration.*
 
 ### 3. Headless / CLI Verification
 ```bash
-# Test Core Detection
+# Test Core Multi-Channel Detection Pipeline
 python run_cli.py
 
-# Test Virtual Fence Intrusion
-python test_phase2.py
+# Test Virtual Fence Intrusion on Sector B (vedio-sih26.mp4)
+python test_phase2.py --video vedio-sih26.mp4 --frames 220
 
-# Test Cascaded ANPR & Throughput
+# Test Virtual Fence Intrusion across ALL sectors (Sector A + Sector B)
+python test_phase2.py --all
+
+# Test Cascaded ANPR & Vehicle Throughput
 python test_phase3.py
 ```
 
@@ -104,10 +109,12 @@ python test_phase3.py
 
 | Feature | Benchmark Metric | Result |
 | :--- | :--- | :--- |
-| **Detection Engine** | YOLOv8n on CPU | 8.5 FPS (720p), 5.0 FPS (1080p) |
-| **Intrusion Detection** | Tripwire crossing | 7 verified breach events detected & logged |
+| **Detection Engine** | YOLOv8n on CPU | 8.5 FPS (720p), 6.2 FPS (478p), 5.0 FPS (1080p) |
+| **Intrusion Detection (Sector A)** | 1080p Tripwire | 7 verified breach events (Inbound & Outbound) |
+| **Intrusion Detection (Sector B)** | Tactical Tripwire (`vedio-sih26.mp4`) | 3-5 verified line crossing events detected & logged |
 | **ANPR Engine** | EasyOCR on vehicle crops | Verified read (`K433ZR` @ 91.8% confidence) |
 | **Low-Confidence Handling**| Blurry / distant plates | Flagged for manual review (0% false positives) |
 
 ---
 *Built for the Smart India Hackathon 2026.*
+
